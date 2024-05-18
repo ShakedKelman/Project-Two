@@ -648,7 +648,7 @@ async function fetchCoinPrices(coinSymbols) {
             const usdPrices = archive_data;
             console.log('USD prices array:', usdPrices); // Log USD prices array
 
-            initializeChart(usdPrices['ZCN']);
+            initializeChart(usdPrices);
 
             return data; // Return the entire data object
         } catch (error) {
@@ -666,12 +666,23 @@ let chart; // Declare chart variable in the global scope
 async function initializeChart(coinPrices, symbol = 'ZCN') {
     console.log('chart works:');
 
-    // Ensure coinPrices is an object
-    if (!Array.isArray(coinPrices)) {
+    // Ensure coinPrices is a valid object
+    if (Object.keys(coinPrices).length === 0)
+    //if (!Array.isArray(coinPrices))
+    {
         console.error('coinPrices is not a valid array:', coinPrices);
         return;
     }
-    dataPoints = coinPrices.map( item => ( {x : item.time, y: item.price }));
+
+    // create an array of arrays. symbol is the key, data is a series
+    const dataPoints = Object.keys(coinPrices)
+        .map(
+            ky => ({
+                symbol: ky,
+                data: coinPrices[ky].map( item => ( {x : item.time, y: item.price }) )
+                })
+        );
+    
     //const now = new Date().getTime();
     //const dataPoints = [];
     //for (let i = 0; i < coinPrices.length; i++) {
@@ -680,21 +691,33 @@ async function initializeChart(coinPrices, symbol = 'ZCN') {
     //}
     
     // Extract data points from the fetched coin prices
-    const dataSeries = {
+    const dataSeries0 = {
         type: "spline",
-        name: symbol, // Use the coin symbol as the series name
         showInLegend: true,
         xValueFormatString: "MMM YYYY",
         yValueFormatString: "$#,##0.########", // Display all digits after the decimal point
-        dataPoints // Use the data points created
     };
-    console.log('Data series:', dataSeries);
 
+    // an array of objects. Each is a data series of a symbol
+    const dataSeries = Object.keys(dataPoints).map(
+        ky => Object.assign(
+            {},
+            dataSeries0,
+            { dataPoints: dataPoints[ky].data, name: dataPoints[ky].symbol }
+        )
+    );
+    //dataPoints // Use the data points created
+
+    console.log('all data series:', dataSeries);
+
+    const allYValues = Object.assign( [], ...Object.values(dataPoints).map( ({data}) => data ) ).map( ({y}) => y );
+        
     const minYValue = 0; // Start from 0
-    const maxYValue = Math.max(...coinPrices.map(item => item.price)) * 1.01; // Add 1% to the maximum value
+    const maxYValue = allYValues.reduce( (a,b)=>{ return (a<b) ? a : b } ) * 1.01; // Add 1% to the maximum value
 
-    const minXValue = dataPoints[0].x;
-    const maxXValue = dataPoints.slice(-1)[0].x;
+    const allXValues = Object.assign( [], ...Object.values(dataPoints).map( ({data}) => data ) ).map( ({x}) => x );
+    const minXValue = allXValues.reduce( (a,b)=>{ return (a>b) ? a : b } );
+    const maxXValue = allXValues.reduce( (a,b)=>{ return (a<b) ? a : b } );
     
     console.log('Min Y Value:', minYValue);
     console.log('Max Y Value:', maxYValue);
@@ -734,14 +757,14 @@ async function initializeChart(coinPrices, symbol = 'ZCN') {
             cursor: "pointer",
             itemclick: toggleDataSeries
         },
-        data: [dataSeries] // Use the fetched data series here
+        data: [dataSeries, dataSeries2] // Use the fetched data series here
     };
     
     if (typeof chart === 'undefined') {
         chart = new CanvasJS.Chart("chartContainer", options); // Assign chart to the global variable
     } else {
         chart.options.axisX.maximum = maxXValue;
-        chart.options.data = [dataSeries];
+        chart.options.data = [ dataSeries, dataSeries2 ];
     }
     chart.render();
 
